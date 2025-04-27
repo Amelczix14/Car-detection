@@ -1,9 +1,10 @@
 fastapi
-sqlalchemy
 uvicorn
-psycopg2-binary
+psycopg2
 opencv-python
+pillow
 numpy
 easyocr
+torch
 ultralytics
-requests
+python-multipart

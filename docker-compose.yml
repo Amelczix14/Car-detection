@@ -8,27 +8,22 @@ services:
       POSTGRES_PASSWORD: password
       POSTGRES_DB: parking_db
     ports:
-      - "5434:5432"  # Zmieniono na 5434 aby uniknąć konfliktu
+      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
 
   backend:
-    build:
-      context: ./backend
-    command: uvicorn backend:app --host 0.0.0.0 --port 8000
-    volumes:
-      - ./backend:/app
+    build: ./backend
     ports:
       - "8000:8000"
+    volumes:
+      - ./backend:/app
     depends_on:
       - db
 
   frontend:
-    image: node:18
-    working_dir: /app
-    volumes:
-      - ./frontend:/app
-    command: npm start
+    build: ./frontend
     ports:
       - "3000:3000"
     depends_on:
