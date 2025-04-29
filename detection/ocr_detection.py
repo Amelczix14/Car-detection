@@ -79,8 +79,4 @@ def read_licence_plate(cropped_plate):
     # Wyświetlenie wyników
     print(f"odczytana tablica: {detected_text.strip()}")
 
-    # TODO: usunąć w wersji webowej
-    cv2.imshow("processed frame", dilated)
-    cv2.waitKey(0)
-
     return detected_text.strip()

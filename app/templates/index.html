@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kontrola Wjazdu</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    .tab-content img {
+      max-width: 100%;
+      height: auto;
+    }
+  </style>
+</head>
+<body>
+<div class="container py-4">
+  <h1 class="mb-4">🚗 System Kontroli Wjazdu</h1>
+
+  <ul class="nav nav-tabs" id="tabs" role="tablist">
+    <li class="nav-item" role="presentation">
+      <button class="nav-link active" id="live-tab" data-bs-toggle="tab" data-bs-target="#live" type="button">Podgląd</button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="history-tab" data-bs-toggle="tab" data-bs-target="#history" type="button">Historia</button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="manage-tab" data-bs-toggle="tab" data-bs-target="#manage" type="button">Zarządzaj dostępem</button>
+    </li>
+  </ul>
+
+  <div class="tab-content mt-3">
+    <!-- Podgląd -->
+    <div class="tab-pane fade show active" id="live">
+        <img src="/video">
+    </div>
+
+    <!-- Historia -->
+    <div class="tab-pane fade" id="history">
+      <table class="table table-striped">
+        <thead><tr><th>Tablica</th><th>Status</th><th>Godzina</th><th>Obraz</th></tr></thead>
+        <tbody id="history-table"></tbody>
+      </table>
+    </div>
+
+    <!-- Zarządzanie -->
+    <div class="tab-pane fade" id="manage">
+      <div class="mb-3">
+        <input type="text" id="new-plate" class="form-control" placeholder="Dodaj nową tablicę">
+        <button class="btn btn-primary mt-2" onclick="addPlate()">Dodaj</button>
+      </div>
+      <ul class="list-group" id="plate-list"></ul>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+function fetchHistory() {
+  fetch('/history').then(res => res.json()).then(data => {
+    const table = document.getElementById('history-table');
+    table.innerHTML = '';
+    data.forEach(item => {
+      const row = `<tr>
+        <td>${item.plate_number}</td>
+        <td>${item.status}</td>
+        <td>${new Date(item.timestamp).toLocaleString()}</td>
+        <td><img src="/${item.image_path}" width="100"></td>
+      </tr>`;
+      table.innerHTML += row;
+    });
+  });
+}
+
+function fetchPlates() {
+  fetch('/plates').then(res => res.json()).then(data => {
+    const list = document.getElementById('plate-list');
+    list.innerHTML = '';
+    data.forEach(plate => {
+      const item = document.createElement('li');
+      item.className = 'list-group-item d-flex justify-content-between align-items-center';
+      item.innerHTML = `${plate} <button class="btn btn-danger btn-sm" onclick="deletePlate('${plate}')">Usuń</button>`;
+      list.appendChild(item);
+    });
+  });
+}
+
+function addPlate() {
+  const plate = document.getElementById('new-plate').value.toUpperCase();
+  fetch('/grant_access', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ plate_number: plate })
+  }).then(() => {
+    document.getElementById('new-plate').value = '';
+    fetchPlates();
+  });
+}
+
+function deletePlate(plate) {
+  fetch('/delete_plate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ plate_number: plate })
+  }).then(fetchPlates);
+}
+
+document.getElementById('history-tab').addEventListener('click', fetchHistory);
+document.getElementById('manage-tab').addEventListener('click', fetchPlates);
+</script>
+</body>
+</html>
