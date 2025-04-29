@@ -21,5 +21,5 @@ if __name__ == "__main__":
     # TODO:
     #  można zmeniać źródło na ścieżli do plików, nr kamery (np 0)
     #  lub adres ip telefonu (np. source = "http://192.168.1.100:4747/video")
-    source = "IMG_6581.mp4"
+    source = "videos/amcia.mp4"
     main(source)
