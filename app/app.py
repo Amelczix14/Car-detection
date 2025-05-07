@@ -48,10 +48,17 @@ def generate_frames():
         # Wykryj tablicę rejestracyjną
         plate_img = detector._process_frame(frame)  # możesz też użyć detect_plate(frame) jeśli wolisz
 
+        plate_number = "NO_PLATE"
         if plate_img is not None:
-            plate_number = read_licence_plate(plate_img)
-        else:
-            plate_number = "NO_PLATE"
+            reads = []
+            for _ in range(5):
+                plate_text, conf = read_licence_plate(plate_img)
+                if conf >= 85 and plate_text:  # tylko jeśli pewność > 85%
+                    reads.append(plate_text)
+
+            if reads:
+                # wybierz najczęściej występujący odczyt
+                plate_number = max(set(reads), key=reads.count)
 
         # Logika: czy tablica w bazie?
         session = Session()
