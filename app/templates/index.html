@@ -19,17 +19,14 @@
     }
 
     /* Hero */
- .hero {
-  background-color: #e9f0fb;
-  color: #0a0a5c;
-  padding: 20px 20px;
-  text-align: center;
-  border-bottom: 1px solid #ccc;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-}
-
-
-
+   .hero {
+    background-color: #e9f0fb;
+    color: #0a0a5c;
+    padding: 20px 20px;
+    text-align: center;
+    border-bottom: 1px solid #ccc;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    }
 
     .hero h1 {
       font-weight: 700;
@@ -91,7 +88,15 @@
       font-weight: 600;
     }
 
-
+    #presentation-video {
+      height: 400px;
+      width: auto;
+      display: block;
+      margin: 0 auto;
+      object-fit: contain;
+      border-radius: 8px;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+    }
   </style>
 </head>
 <body>
@@ -146,15 +151,12 @@
   <div class="tab-pane fade" id="presentation">
     <h5 class="section-title">Prezentacja działania na gotowym nagraniu</h5>
     <div class="mb-3">
-      <video id="presentation-video" class="w-100 rounded shadow" controls style="width: 100%; max-width: 640px; max-height: 420px; display: block; margin: 0 auto;">
-        <source src="/videos/amcia.mp4" type="video/mp4">
-        Twoja przeglądarka nie obsługuje elementu wideo.
-      </video>
+      <div class="mb-3">
+        <img id="presentation-video" class="w-100 rounded shadow" src="/video_with_detection?video=madzia.mp4" alt="Wideo z detekcją" />
+      </div>
     </div>
-    <div class="text-center mt-3">
-      <button class="btn-custom-detect" onclick="runDetection()">
-        <i class="fas fa-search me-1"></i>Uruchom detekcję
-      </button>
+    <div id="detection-status" class="text-center fw-bold mt-3" style="font-size: 1.2rem; color: gray;">
+      Przetwarzanie...
     </div>
     <div id="presentation-results" class="mt-4"></div>
   </div>
@@ -217,6 +219,79 @@
 
   document.querySelector('[data-bs-target="#history"]').addEventListener('click', fetchHistory);
   document.querySelector('[data-bs-target="#manage"]').addEventListener('click', fetchPlates);
+</script>
+<script>
+  async function runDetection() {
+    const resultsDiv = document.getElementById('presentation-results');
+    resultsDiv.textContent = "Trwa wykrywanie...";
+
+    try {
+      const response = await fetch('/run_detection', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ video_file: 'amcia.mp4' })  // nazwa pliku video
+      });
+
+      const data = await response.json();
+      if (response.ok) {
+        if (data.plate_number) {
+          resultsDiv.textContent = `Wykryta tablica: ${data.plate_number} (pewność: ${(data.confidence * 100).toFixed(1)}%)`;
+        } else {
+          resultsDiv.textContent = data.message || "Nie wykryto tablicy.";
+        }
+      } else {
+        resultsDiv.textContent = `Błąd: ${data.error || 'Nieznany błąd'}`;
+      }
+    } catch (err) {
+      resultsDiv.textContent = "Błąd połączenia z serwerem.";
+      console.error(err);
+    }
+  }
+</script>
+<script>
+  let lastPlate = null;
+  let lastStatus = null;
+
+  setInterval(() => {
+    fetch('/latest_detection')
+      .then(response => response.json())
+      .then(data => {
+        const statusEl = document.getElementById("detection-status");
+        if (!data || !data.plate) return;
+
+        if (data.status === "GRANTED") {
+          statusEl.innerText = `✅ ${data.plate} — dostęp przyznany`;
+          statusEl.style.color = "green";
+          if (lastStatus !== "GRANTED") showToast("Przyznano dostęp");
+        } else if (data.status === "DENIED") {
+          statusEl.innerText = `❌ ${data.plate} — brak dostępu`;
+          statusEl.style.color = "red";
+        } else {
+          statusEl.innerText = "Przetwarzanie...";
+          statusEl.style.color = "gray";
+        }
+
+        lastStatus = data.status;
+        lastPlate = data.plate;
+      });
+  }, 1000);
+
+  function showToast(message) {
+    const toast = document.createElement("div");
+    toast.innerText = message;
+    toast.style.position = "fixed";
+    toast.style.top = "20px";
+    toast.style.left = "50%";
+    toast.style.transform = "translateX(-50%)";
+    toast.style.backgroundColor = "#28a745";
+    toast.style.color = "white";
+    toast.style.padding = "10px 20px";
+    toast.style.borderRadius = "5px";
+    toast.style.boxShadow = "0 0 10px rgba(0,0,0,0.2)";
+    toast.style.zIndex = 9999;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 3000);
+  }
 </script>
 </body>
 </html>

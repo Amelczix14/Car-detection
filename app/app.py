@@ -4,6 +4,7 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 from detection.yolo_detection import YOLODetection
 from detection.ocr_detection import read_licence_plate
 import datetime
+import time
 import cv2
 import os
 
@@ -29,57 +30,63 @@ class Log(Base):
 # Flask
 app = Flask(__name__)
 
-# Kamera (ustaw na odpowiedni index kamery lub stream URL)
 cap = cv2.VideoCapture(2)
-detector = YOLODetection('../my_model/my_model.pt')  # <- podaj prawidłową ścieżkę
-
+detector = YOLODetection('../my_model/my_model.pt')
 
 # Dummy detection (do podmiany na YOLO + OCR)
 def dummy_detect_plate(frame):
     return "XYZ1234", frame
 
+def generate_frames(video_path=None):
+    cap = None
+    if video_path:
+        cap = cv2.VideoCapture(video_path)
+    else:
+        cap = cv2.VideoCapture(2)  # kamera domyślna
 
-def generate_frames():
-    while True:
-        success, frame = cap.read()
-        if not success:
+    last_granted_time = 0
+
+    while cap.isOpened():
+        ret, frame = cap.read()
+        if not ret:
             break
 
-        # Wykryj tablicę rejestracyjną
-        plate_img = detector._process_frame(frame)  # możesz też użyć detect_plate(frame) jeśli wolisz
+        # frame = cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
 
+        plate_img = detector._process_frame(frame)
         plate_number = "NO_PLATE"
-        if plate_img is not None:
-            print("plate_img")
-            reads = []
-            for _ in range(5):
-                plate_text, conf = read_licence_plate(plate_img)
-                if plate_text:  # tylko jeśli pewność > 85%
-                    reads.append(plate_text)
+        status = "PROCESSING"
 
+        if plate_img is not None and (time.time() - last_granted_time > 10):
+            reads = []
+            for _ in range(3):
+                plate_text, conf = read_licence_plate(plate_img)
+                if plate_text:
+                    reads.append(plate_text)
             if reads:
-                # wybierz najczęściej występujący odczyt
                 plate_number = max(set(reads), key=reads.count)
 
-        # Logika: czy tablica w bazie?
-        session = Session()
-        found = session.query(Plate).filter_by(plate_number=plate_number).first()
-        status = 'GRANTED' if found else 'DENIED'
+            session = Session()
+            found = session.query(Plate).filter_by(plate_number=plate_number).first()
+            status = 'GRANTED' if found else 'DENIED'
+            session.add(Log(plate_number=plate_number, status=status))
+            session.commit()
+            session.close()
 
-        session.add(Log(plate_number=plate_number, status=status))
-        session.commit()
-        session.close()
+            if status == "GRANTED":
+                last_granted_time = time.time()
 
-        # Nakładka na obraz
-        msg = f"{plate_number} - {status}"
-        cv2.putText(frame, msg, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1,
-                    (0, 255, 0) if status == 'GRANTED' else (0, 0, 255), 2)
+            current_plate_result["plate"] = plate_number
+            current_plate_result["status"] = status
+            current_plate_result["timestamp"] = time.time()
 
         _, buffer = cv2.imencode('.jpg', frame)
-        frame = buffer.tobytes()
-
+        frame_bytes = buffer.tobytes()
         yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
+               b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+
+    cap.release()
+
 
 
 @app.route('/')
@@ -133,6 +140,21 @@ def delete_plate():
 @app.route('/videos/<path:filename>')
 def serve_video(filename):
     return send_from_directory('videos', filename)
+
+@app.route('/video_with_detection')
+def video_with_detection():
+    video_file = request.args.get('video', 'amcia.mp4')  # domyślnie amcia.mp4
+    video_path = os.path.join('videos', video_file)
+    if not os.path.exists(video_path):
+        return "Video not found", 404
+    return Response(generate_frames(video_path), mimetype='multipart/x-mixed-replace; boundary=frame')
+
+current_plate_result = {"plate": None, "status": None, "timestamp": None}
+
+@app.route('/latest_detection')
+def latest_detection():
+    return jsonify(current_plate_result)
+
 
 if __name__ == '__main__':
     if not os.path.exists("static/logs"):

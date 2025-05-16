@@ -54,10 +54,12 @@ def read_licence_plate(cropped_plate):
     dilated = cv2.dilate(denoised, kernel, iterations=1)
 
     custom_config = r'--oem 3 --psm 6 -c tessedit_char_whitelist=' + allowed_characters + ' -c output_type=string'
+    detected_text = pytesseract.image_to_string(dilated, config=custom_config)
+    detected_text = detected_text.strip().replace(' ', '').replace('\n', '') # dodane
     data = pytesseract.image_to_data(dilated, config=custom_config, output_type=pytesseract.Output.DICT)
 
-    text = ''.join([re.sub(r'\W+', '', w) for w in data['text'] if w.strip() != ''])
-    confs = [int(c) for c in data['conf'] if c.isdigit()]
+    # text = ''.join([re.sub(r'\W+', '', w) for w in data['text'] if w.strip() != ''])
+    confs = [int(c) for c in data['conf']]
     confidence = np.mean(confs) if confs else 0
 
-    return text.strip(), confidence
+    return detected_text, confidence
