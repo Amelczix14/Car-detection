@@ -82,6 +82,15 @@
       border: none;
     }
 
+    .btn-custom-detect {
+      background-color: #0a0a5c;
+      color: white;
+      border: none;
+      padding: 10px 24px;
+      border-radius: 8px;
+      font-weight: 600;
+    }
+
 
   </style>
 </head>
@@ -99,6 +108,7 @@
     <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#live">Podgląd</button></li>
     <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#history">Historia</button></li>
     <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#manage">Zarządzanie</button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#presentation">Prezentacja</button></li>
   </ul>
 
   <div class="tab-content">
@@ -131,6 +141,23 @@
       </div>
       <ul class="list-group" id="plate-list"></ul>
     </div>
+
+    <!-- Prezentacja -->
+  <div class="tab-pane fade" id="presentation">
+    <h5 class="section-title">Prezentacja działania na gotowym nagraniu</h5>
+    <div class="mb-3">
+      <video id="presentation-video" class="w-100 rounded shadow" controls style="width: 100%; max-width: 640px; max-height: 420px; display: block; margin: 0 auto;">
+        <source src="/videos/amcia.mp4" type="video/mp4">
+        Twoja przeglądarka nie obsługuje elementu wideo.
+      </video>
+    </div>
+    <div class="text-center mt-3">
+      <button class="btn-custom-detect" onclick="runDetection()">
+        <i class="fas fa-search me-1"></i>Uruchom detekcję
+      </button>
+    </div>
+    <div id="presentation-results" class="mt-4"></div>
+  </div>
 
   </div>
 </div>

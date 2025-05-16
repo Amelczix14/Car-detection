@@ -1,4 +1,4 @@
-from flask import Flask, render_template, Response, request, jsonify
+from flask import Flask, render_template, Response, request, jsonify, send_from_directory
 from sqlalchemy import create_engine, Column, Integer, String, DateTime, Text
 from sqlalchemy.orm import sessionmaker, declarative_base
 from detection.yolo_detection import YOLODetection
@@ -50,10 +50,11 @@ def generate_frames():
 
         plate_number = "NO_PLATE"
         if plate_img is not None:
+            print("plate_img")
             reads = []
             for _ in range(5):
                 plate_text, conf = read_licence_plate(plate_img)
-                if conf >= 85 and plate_text:  # tylko jeśli pewność > 85%
+                if plate_text:  # tylko jeśli pewność > 85%
                     reads.append(plate_text)
 
             if reads:
@@ -128,6 +129,10 @@ def delete_plate():
     session.commit()
     session.close()
     return jsonify({'status': 'deleted'})
+
+@app.route('/videos/<path:filename>')
+def serve_video(filename):
+    return send_from_directory('videos', filename)
 
 if __name__ == '__main__':
     if not os.path.exists("static/logs"):
