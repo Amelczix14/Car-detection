@@ -152,7 +152,11 @@
     <h5 class="section-title">Prezentacja działania na gotowym nagraniu</h5>
     <div class="mb-3">
       <div class="mb-3">
-        <img id="presentation-video" class="w-100 rounded shadow" src="/video_with_detection?video=madzia.mp4" alt="Wideo z detekcją" />
+        <div class="d-flex justify-content-center mb-3 gap-2">
+          <button class="btn btn-custom-detect" onclick="startVideo()">Start</button>
+          <button class="btn btn-custom-detect" onclick="restartVideo()">Odtwórz od początku</button>
+        </div>
+        <img id="presentation-video" class="w-100 rounded shadow" />
       </div>
     </div>
     <div id="detection-status" class="text-center fw-bold mt-3" style="font-size: 1.2rem; color: gray;">
@@ -275,22 +279,25 @@
         lastPlate = data.plate;
       });
   }, 1000);
+</script>
+<script>
+  const videoElement = document.getElementById("presentation-video");
+  const videoSrc = "/video_with_detection?video=amcia.mp4";
 
-  function showToast(message) {
-    const toast = document.createElement("div");
-    toast.innerText = message;
-    toast.style.position = "fixed";
-    toast.style.top = "20px";
-    toast.style.left = "50%";
-    toast.style.transform = "translateX(-50%)";
-    toast.style.backgroundColor = "#28a745";
-    toast.style.color = "white";
-    toast.style.padding = "10px 20px";
-    toast.style.borderRadius = "5px";
-    toast.style.boxShadow = "0 0 10px rgba(0,0,0,0.2)";
-    toast.style.zIndex = 9999;
-    document.body.appendChild(toast);
-    setTimeout(() => toast.remove(), 3000);
+  function startVideo() {
+    videoElement.src = videoSrc;
+  }
+
+  function stopVideo() {
+    videoElement.removeAttribute("src");
+    videoElement.src = "";
+  }
+
+  function restartVideo() {
+    stopVideo();
+    setTimeout(() => {
+      startVideo();
+    }, 300);
   }
 </script>
 </body>
