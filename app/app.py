@@ -7,12 +7,18 @@ import datetime
 import time
 import cv2
 import os
+from collections import deque, Counter
 
 # Baza danych
 DATABASE_URL = 'postgresql://postgres:secret@localhost:5432/access_control'
 engine = create_engine(DATABASE_URL)
 Session = sessionmaker(bind=engine)
 Base = declarative_base()
+
+# Historia 
+recent_reads = deque(maxlen=5)
+last_log_time = 0
+cooldown_after_grant = 30 
 
 # Modele
 class Plate(Base):
@@ -30,60 +36,64 @@ class Log(Base):
 # Flask
 app = Flask(__name__)
 
-cap = cv2.VideoCapture(2)
+cap = cv2.VideoCapture(0)
 detector = YOLODetection('../my_model/my_model.pt')
 
 # Dummy detection (do podmiany na YOLO + OCR)
 def dummy_detect_plate(frame):
     return "XYZ1234", frame
 
-def generate_frames(video_path=None):
-    cap = None
-    if video_path:
-        cap = cv2.VideoCapture(video_path)
-    else:
-        cap = cv2.VideoCapture(2)  # kamera domyślna
 
-    last_granted_time = 0
+def generate_frames(video_path=None):
+    global  last_log_time
+
+    cap = cv2.VideoCapture(video_path) if video_path else cv2.VideoCapture(0)
 
     while cap.isOpened():
         ret, frame = cap.read()
         if not ret:
             break
 
-        # frame = cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
+        frame = cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
+
+        # 30 s przerwy po udzieleniu dostępu
+        if time.time() - last_log_time < cooldown_after_grant:
+            _, buffer = cv2.imencode('.jpg', frame)
+            yield (b'--frame\r\n'
+                   b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
+            continue
 
         plate_img = detector._process_frame(frame)
-        plate_number = "NO_PLATE"
-        status = "PROCESSING"
 
-        if plate_img is not None and (time.time() - last_granted_time > 10):
-            reads = []
-            for _ in range(3):
-                plate_text, conf = read_licence_plate(plate_img)
-                if plate_text:
-                    reads.append(plate_text)
-            if reads:
-                plate_number = max(set(reads), key=reads.count)
+        if plate_img is not None:
+            plate_text, conf = read_licence_plate(plate_img)
 
-            session = Session()
-            found = session.query(Plate).filter_by(plate_number=plate_number).first()
-            status = 'GRANTED' if found else 'DENIED'
-            session.add(Log(plate_number=plate_number, status=status))
-            session.commit()
-            session.close()
+            if not plate_text or len(plate_text) < 6:
+                continue
 
-            if status == "GRANTED":
-                last_granted_time = time.time()
+            recent_reads.append(plate_text)
+            most_common, count = Counter(recent_reads).most_common(1)[0]
 
-            current_plate_result["plate"] = plate_number
-            current_plate_result["status"] = status
-            current_plate_result["timestamp"] = time.time()
+            if count >= 3:
+                plate_number = most_common
+
+                session = Session()
+                found = session.query(Plate).filter_by(plate_number=plate_number).first()
+                status = 'GRANTED' if found else 'DENIED'
+                session.add(Log(plate_number=plate_number, status=status))
+                session.commit()
+                session.close()
+
+                
+                last_log_time = time.time() 
+
+                current_plate_result["plate"] = plate_number
+                current_plate_result["status"] = status
+                current_plate_result["timestamp"] = last_log_time
 
         _, buffer = cv2.imencode('.jpg', frame)
-        frame_bytes = buffer.tobytes()
         yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+               b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
 
     cap.release()
 
@@ -143,7 +153,7 @@ def serve_video(filename):
 
 @app.route('/video_with_detection')
 def video_with_detection():
-    video_file = request.args.get('video', 'amcia.mp4')  # domyślnie amcia.mp4
+    video_file = request.args.get('video', 'madzia.mp4')  # domyślnie amcia.mp4
     video_path = os.path.join('videos', video_file)
     if not os.path.exists(video_path):
         return "Video not found", 404
@@ -159,4 +169,4 @@ def latest_detection():
 if __name__ == '__main__':
     if not os.path.exists("static/logs"):
         os.makedirs("static/logs")
-    app.run(debug=True)
+    app.run(debug=True, port=5004)
