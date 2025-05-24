@@ -2,6 +2,8 @@ from flask import Flask, render_template, Response, request, jsonify, send_from_
 from sqlalchemy import create_engine, Column, Integer, String, DateTime, Text
 from sqlalchemy.orm import sessionmaker, declarative_base
 from detection.yolo_detection import YOLODetection
+from detection.car_detection import CarDetection
+from detection.color_detection import ColorDetection
 from detection.ocr_detection import read_licence_plate
 import datetime
 import time
@@ -37,7 +39,12 @@ class Log(Base):
 app = Flask(__name__)
 
 cap = cv2.VideoCapture(0)
-detector = YOLODetection('../models/my_model/my_model.pt')
+plate_detector = YOLODetection('../models/my_model/my_model.pt')
+car_detector = CarDetection('../models/car_model/car_model.pt')
+color_detector = ColorDetection()
+
+current_plate_result = {"plate": None, "status": None, "timestamp": None}
+current_car_color = None
 
 # Dummy detection (do podmiany na YOLO + OCR)
 def dummy_detect_plate(frame):
@@ -45,7 +52,7 @@ def dummy_detect_plate(frame):
 
 
 def generate_frames(video_path=None):
-    global  last_log_time
+    global  last_log_time, current_car_color
 
     cap = cv2.VideoCapture(video_path) if video_path else cv2.VideoCapture(0)
 
@@ -63,7 +70,7 @@ def generate_frames(video_path=None):
                    b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
             continue
 
-        plate_img = detector._process_frame(frame)
+        plate_img = plate_detector._process_frame(frame)
 
         if plate_img is not None:
             plate_text, conf = read_licence_plate(plate_img)
@@ -84,12 +91,29 @@ def generate_frames(video_path=None):
                 session.commit()
                 session.close()
 
-                
                 last_log_time = time.time() 
 
                 current_plate_result["plate"] = plate_number
                 current_plate_result["status"] = status
                 current_plate_result["timestamp"] = last_log_time
+
+                # TODO: detekcja koloru samochodu
+                car_results = car_detector.model(frame, verbose=False)
+                for det in car_results[0].boxes:
+                    if det.conf > car_detector.min_thresh:
+                        x1, y1, x2, y2 = map(int, det.xyxy[0])
+                        car_crop = frame[y1:y2, x1:x2]
+
+                        # kolor
+                        detected_color = color_detector.classify_color(car_crop)
+                        current_car_color = detected_color
+
+                        # # rysowanie ramki i koloru na obrazie
+                        # cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 0, 0), 2)
+                        # cv2.putText(frame, f"Color: {detected_color}", (x1, y2 + 20),
+                        #             cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+
+                        break
 
         _, buffer = cv2.imencode('.jpg', frame)
         yield (b'--frame\r\n'
@@ -127,6 +151,7 @@ def history():
             'plate_number': log.plate_number,
             'timestamp': log.timestamp.isoformat(),
             'status': log.status
+            # TODO: kolor??
         }
         for log in logs
     ])
@@ -159,11 +184,14 @@ def video_with_detection():
         return "Video not found", 404
     return Response(generate_frames(video_path), mimetype='multipart/x-mixed-replace; boundary=frame')
 
-current_plate_result = {"plate": None, "status": None, "timestamp": None}
-
 @app.route('/latest_detection')
 def latest_detection():
     return jsonify(current_plate_result)
+
+# TODO: kolor auta
+# @app.route('/latest_car_color')
+# def latest_car_color():
+#     return jsonify({'car_color': current_car_color})
 
 
 if __name__ == '__main__':
