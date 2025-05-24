@@ -1,64 +1,69 @@
 import cv2
-import os
-from ultralytics import YOLO
+from detection.yolo_detection import YOLODetection
+from detection.car_detection import CarDetection
+from detection.color_detection import ColorDetection
 
-# === KONFIGURACJA ===
-INPUT_PATH = "app/videos/madzia.mp4"
-MODEL_PATH = "models/color_model/color_model.pt"
-CONFIDENCE_THRESHOLD = 0.80  # Detekcje tylko powyżej 85%
-# =====================
+# === Ścieżka do pliku wideo ===
+VIDEO_PATH = "app/videos/amcia.mp4"
+LICENSE_MODEL_PATH = "models/my_model/my_model.pt"
+CAR_MODEL_PATH = "models/car_model/car_model.pt"
 
-ext = os.path.splitext(INPUT_PATH)[1].lower()
-is_image = ext in [".jpg", ".jpeg", ".png"]
+plate_detector = YOLODetection(LICENSE_MODEL_PATH)
+car_detector = CarDetection(CAR_MODEL_PATH)
+color_detector = ColorDetection()
 
-model = YOLO(MODEL_PATH)
+# === Otwórz wideo ===
+cap = cv2.VideoCapture(VIDEO_PATH)
 
-def draw_detections(frame, results):
-    for r in results:
-        if r.boxes is not None:
-            for box in r.boxes:
-                conf = float(box.conf[0])
-                if conf < CONFIDENCE_THRESHOLD:
-                    continue
+if not cap.isOpened():
+    print("❌ Nie udało się otworzyć pliku wideo.")
+    exit()
 
-                cls_id = int(box.cls[0])
-                label = model.names[cls_id]
-                x1, y1, x2, y2 = map(int, box.xyxy[0])
-                label_text = f'{label} {conf:.2f}'
+while True:
+    ret, frame = cap.read()
+    if not ret:
+        break
 
-                # Ramka wokół obiektu
-                cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+    frame = cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
 
-                # Tło pod napisem
-                (tw, th), _ = cv2.getTextSize(label_text, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
-                cv2.rectangle(frame, (x1, y1 - th - 6), (x1 + tw, y1), (0, 255, 0), -1)
+    plate_results = plate_detector.model(frame, verbose=False)
+    plate_detected = False
 
-                # Tekst
-                cv2.putText(frame, label_text, (x1, y1 - 4),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
-    return frame
+    for det in plate_results[0].boxes:
+        if det.conf > plate_detector.min_thresh:
+            x1, y1, x2, y2 = map(int, det.xyxy[0])
+            label = plate_detector.model.names[int(det.cls)]
+            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            cv2.putText(frame, f"{label}", (x1, y1 - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+            plate_detected = True
 
-if is_image:
-    img = cv2.imread(INPUT_PATH)
-    if img is not None:
-        results = model(img)
-        annotated = draw_detections(img.copy(), results)
-        cv2.imshow("Detekcja koloru samochodu", annotated)
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
+    # detekcja samochodu tylko jeśli wykryto tablicę
+    if plate_detected:
+        car_results = car_detector.model(frame, verbose=False)
+        for det in car_results[0].boxes:
+            if det.conf > car_detector.min_thresh:
+                x1, y1, x2, y2 = map(int, det.xyxy[0])
+                label = car_detector.model.names[int(det.cls)]
 
-else:
-    cap = cv2.VideoCapture(INPUT_PATH)
-    if cap.isOpened():
-        while True:
-            ret, frame = cap.read()
-            if not ret:
+                cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 0, 0), 2)
+                cv2.putText(frame, f"{label}", (x1, y1 - 10),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
+
+                car_crop = frame[y1:y2, x1:x2]
+
+                car_color = color_detector.classify_color(car_crop)
+                print("Kolor samochodu:", car_color)
+
+                if car_color:
+                    cv2.putText(frame, f"Kolor: {car_color}", (x1, y2 + 25),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
                 break
-            frame = cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
-            results = model(frame, verbose=False)
-            annotated = draw_detections(frame.copy(), results)
-            cv2.imshow("Detekcja koloru samochodu", annotated)
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-                break
-        cap.release()
-        cv2.destroyAllWindows()
+
+    cv2.imshow("Detekcja tablicy i samochodu", frame)
+
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
+
+cap.release()
+cv2.destroyAllWindows()
