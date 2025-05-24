@@ -37,7 +37,7 @@ class Log(Base):
 app = Flask(__name__)
 
 cap = cv2.VideoCapture(0)
-detector = YOLODetection('../my_model/my_model.pt')
+detector = YOLODetection('../models/my_model/my_model.pt')
 
 # Dummy detection (do podmiany na YOLO + OCR)
 def dummy_detect_plate(frame):
