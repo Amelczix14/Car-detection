@@ -233,7 +233,7 @@
       const response = await fetch('/run_detection', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ video_file: 'amcia.mp4' })  // nazwa pliku video
+        body: JSON.stringify({ video_file: 'amcia2.mp4' })  // nazwa pliku video
       });
 
       const data = await response.json();
@@ -263,12 +263,17 @@
         const statusEl = document.getElementById("detection-status");
         if (!data || !data.plate) return;
 
+        let colorText = "";
+        if (data.color) {
+          colorText = ` | Kolor: ${data.color}`;
+        }
+
         if (data.status === "GRANTED") {
-          statusEl.innerText = `✅ ${data.plate} — dostęp przyznany`;
+          statusEl.innerText = `✅ ${data.plate} — dostęp przyznany${colorText}`;
           statusEl.style.color = "green";
           if (lastStatus !== "GRANTED") showToast("Przyznano dostęp");
         } else if (data.status === "DENIED") {
-          statusEl.innerText = `❌ ${data.plate} — brak dostępu`;
+          statusEl.innerText = `❌ ${data.plate} — brak dostępu${colorText}`;
           statusEl.style.color = "red";
         } else {
           statusEl.innerText = "Przetwarzanie...";
@@ -279,10 +284,11 @@
         lastPlate = data.plate;
       });
   }, 1000);
+
 </script>
 <script>
   const videoElement = document.getElementById("presentation-video");
-  const videoSrc = "/video_with_detection?video=amcia.mp4";
+  const videoSrc = "/video_with_detection?video=amcia2.mp4";
 
   function startVideo() {
     videoElement.src = videoSrc;

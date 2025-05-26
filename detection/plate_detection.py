@@ -2,10 +2,11 @@ import cv2
 from ultralytics import YOLO
 
 
-class YOLODetection:
+class PlateDetection:
     def __init__(self, model_path, min_thresh=0.85):
         self.model = YOLO(model_path)
         self.min_thresh = min_thresh
+        self.last_bbox = None
 
     def detect_plate(self, source):
         """
@@ -75,5 +76,6 @@ class YOLODetection:
                 # wycięcie tablicy
                 cropped_plate = frame[y1:y2, x1:x2]
                 best_plate = cropped_plate
+                self.last_bbox = (x1, y1, x2, y2)
 
         return best_plate
