@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>System Kontroli Wjazdu</title>
 
-  <!-- Bootstrap & Fonty -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
   <script src="https://kit.fontawesome.com/a076d05399.js" crossorigin="anonymous"></script>
@@ -18,7 +17,6 @@
       color: #0a0a5c;
     }
 
-    /* Hero */
    .hero {
     background-color: #e9f0fb;
     color: #0a0a5c;
@@ -101,7 +99,6 @@
 </head>
 <body>
 
-<!-- HERO -->
 <section class="hero text-center">
   <div class="container">
     <h1>System rozpoznawania tablic i kontroli dostępu</h1>
@@ -230,10 +227,14 @@
     resultsDiv.textContent = "Trwa wykrywanie...";
 
     try {
+      const videoRes = await fetch('/current_video');
+      const videoData = await videoRes.json();
+      const currentVideo = videoData.filename;
+
       const response = await fetch('/run_detection', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ video_file: 'amcia2.mp4' })  // nazwa pliku video
+        body: JSON.stringify({ video_file: currentVideo })
       });
 
       const data = await response.json();
@@ -288,10 +289,18 @@
 </script>
 <script>
   const videoElement = document.getElementById("presentation-video");
-  const videoSrc = "/video_with_detection?video=amcia2.mp4";
+
+  function fetchCurrentVideoAndPlay() {
+    fetch('/current_video')
+      .then(res => res.json())
+      .then(data => {
+        const videoSrc = `/video_with_detection?video=${data.filename}`;
+        videoElement.src = videoSrc;
+      });
+  }
 
   function startVideo() {
-    videoElement.src = videoSrc;
+    fetchCurrentVideoAndPlay();
   }
 
   function stopVideo() {
@@ -302,7 +311,7 @@
   function restartVideo() {
     stopVideo();
     setTimeout(() => {
-      startVideo();
+      fetchCurrentVideoAndPlay();
     }, 300);
   }
 </script>

@@ -10,6 +10,11 @@ import time
 import cv2
 import os
 
+
+camera_number = 1 # tutaj wpisać odpowiedni numer kamery
+rotate = False # zmienna odpowiedzialna za obracanie filmików
+CURRENT_VIDEO = "amcia2.mp4" # aktualnie wyświetlany filmik
+
 # Baza danych
 DATABASE_URL = 'postgresql://postgres:secret@localhost:5432/access_control'
 engine = create_engine(DATABASE_URL)
@@ -32,21 +37,17 @@ class Log(Base):
 # Flask
 app = Flask(__name__)
 
-cap = cv2.VideoCapture(2)
+cap = cv2.VideoCapture(camera_number)
 plate_detector = PlateDetection('../models/my_model/my_model.pt')
 car_detector = CarDetection('../models/car_model/car_model.pt')
 color_detector = ColorDetection()
-
-# Dummy detection (do podmiany na YOLO + OCR)
-def dummy_detect_plate(frame):
-    return "XYZ1234", frame
 
 def generate_frames(video_path=None):
     cap = None
     if video_path:
         cap = cv2.VideoCapture(video_path)
     else:
-        cap = cv2.VideoCapture(2)  # kamera domyślna
+        cap = cv2.VideoCapture(camera_number)
 
     last_granted_time = 0
 
@@ -55,7 +56,8 @@ def generate_frames(video_path=None):
         if not ret:
             break
 
-        # frame = cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
+        if rotate:
+            frame = cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
 
         plate_img = plate_detector._process_frame(frame)
         plate_number = "NO_PLATE"
@@ -112,7 +114,7 @@ def generate_frames(video_path=None):
 
 @app.route('/')
 def index():
-    return render_template('index.html')
+    return render_template('index.html', current_video=CURRENT_VIDEO)
 
 @app.route('/video')
 def video():
@@ -164,7 +166,7 @@ def serve_video(filename):
 
 @app.route('/video_with_detection')
 def video_with_detection():
-    video_file = request.args.get('video', 'amcia2.mp4')  # domyślnie amcia.mp4
+    video_file = request.args.get('video', CURRENT_VIDEO)
     video_path = os.path.join('videos', video_file)
     if not os.path.exists(video_path):
         return "Video not found", 404
@@ -175,6 +177,10 @@ current_plate_result = {"plate": None, "status": None, "color": None, "timestamp
 @app.route('/latest_detection')
 def latest_detection():
     return jsonify(current_plate_result)
+
+@app.route('/current_video')
+def get_current_video():
+    return jsonify({'filename': CURRENT_VIDEO})
 
 
 if __name__ == '__main__':
