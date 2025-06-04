@@ -145,22 +145,49 @@
     </div>
 
     <!-- Prezentacja -->
-  <div class="tab-pane fade" id="presentation">
-    <h5 class="section-title">Prezentacja działania na gotowym nagraniu</h5>
-    <div class="mb-3">
-      <div class="mb-3">
-        <div class="d-flex justify-content-center mb-3 gap-2">
-          <button class="btn btn-custom-detect" onclick="startVideo()">Start</button>
-          <button class="btn btn-custom-detect" onclick="restartVideo()">Odtwórz od początku</button>
-        </div>
-        <img id="presentation-video" class="w-100 rounded shadow" />
-      </div>
-    </div>
-    <div id="detection-status" class="text-center fw-bold mt-3" style="font-size: 1.2rem; color: gray;">
-      Przetwarzanie...
-    </div>
-    <div id="presentation-results" class="mt-4"></div>
+<!--  <div class="tab-pane fade" id="presentation">-->
+<!--    <h5 class="section-title">Prezentacja działania na gotowym nagraniu</h5>-->
+<!--    <div class="mb-3">-->
+<!--      <div class="mb-3">-->
+<!--        <div class="d-flex justify-content-center mb-3 gap-2">-->
+<!--          <button class="btn btn-custom-detect" onclick="startVideo()">Start</button>-->
+<!--          <button class="btn btn-custom-detect" onclick="restartVideo()">Odtwórz od początku</button>-->
+<!--        </div>-->
+<!--        <img id="presentation-video" class="w-100 rounded shadow" />-->
+<!--      </div>-->
+<!--    </div>-->
+<!--    <div id="detection-status" class="text-center fw-bold mt-3" style="font-size: 1.2rem; color: gray;">-->
+<!--      Przetwarzanie...-->
+<!--    </div>-->
+<!--    <div id="presentation-results" class="mt-4"></div>-->
+<!--  </div>-->
+    <div class="tab-pane fade" id="presentation">
+  <h5 class="section-title">Prezentacja działania na gotowym nagraniu</h5>
+
+  <!-- Przycisk do wyboru filmu -->
+  <div class="mb-3 d-flex justify-content-center gap-2">
+    <button class="btn btn-custom-detect" onclick="loadPresentationVideo('amcia.mp4')">Film 1</button>
+    <button class="btn btn-custom-detect" onclick="loadPresentationVideo('amcia2.mp4')">Film 2</button>
+    <button class="btn btn-custom-detect" onclick="loadPresentationVideo('amcia3.mp4')">Film 3</button>
+    <button class="btn btn-custom-detect" onclick="loadPresentationVideo('madzia.mp4')">Film 4</button>
   </div>
+
+  <!-- Wideo jako MJPEG stream -->
+  <div class="text-center mb-3">
+    <img id="presentation-video" class="w-100 rounded shadow"
+         src="/video_with_detection?video=amcia.mp4"
+         onload="hideLoading()"
+         onerror="showError()" />
+  </div>
+
+  <!-- Status ładowania -->
+  <div id="detection-status" class="text-center fw-bold mt-3" style="font-size: 1.2rem; color: gray;">
+    Przetwarzanie...
+  </div>
+
+  <!-- Wyniki detekcji -->
+  <div id="presentation-results" class="mt-4"></div>
+</div>
 
   </div>
 </div>
@@ -254,6 +281,28 @@
   }
 </script>
 <script>
+function loadPresentationVideo(filename) {
+  const videoElement = document.getElementById("presentation-video");
+  const status = document.getElementById("detection-status");
+
+  videoElement.style.border = "none";
+  videoElement.src = `/video_with_detection?video=${filename}&reset=true&t=${Date.now()}`;
+  status.innerText = "Przetwarzanie...";
+  status.style.color = "gray";
+
+  lastPlate = null;
+  lastStatus = null;
+}
+
+function hideLoading() {
+  document.getElementById("detection-status").innerText = "";
+}
+
+function showError() {
+  document.getElementById("detection-status").innerText = "Błąd podczas ładowania filmu.";
+}
+</script>
+<script>
   let lastPlate = null;
   let lastStatus = null;
 
@@ -287,33 +336,6 @@
   }, 1000);
 
 </script>
-<script>
-  const videoElement = document.getElementById("presentation-video");
 
-  function fetchCurrentVideoAndPlay() {
-    fetch('/current_video')
-      .then(res => res.json())
-      .then(data => {
-        const videoSrc = `/video_with_detection?video=${data.filename}`;
-        videoElement.src = videoSrc;
-      });
-  }
-
-  function startVideo() {
-    fetchCurrentVideoAndPlay();
-  }
-
-  function stopVideo() {
-    videoElement.removeAttribute("src");
-    videoElement.src = "";
-  }
-
-  function restartVideo() {
-    stopVideo();
-    setTimeout(() => {
-      fetchCurrentVideoAndPlay();
-    }, 300);
-  }
-</script>
 </body>
 </html>

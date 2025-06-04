@@ -164,13 +164,29 @@ def delete_plate():
 def serve_video(filename):
     return send_from_directory('videos', filename)
 
+
 @app.route('/video_with_detection')
 def video_with_detection():
     video_file = request.args.get('video', CURRENT_VIDEO)
     video_path = os.path.join('videos', video_file)
+
     if not os.path.exists(video_path):
         return "Video not found", 404
+
+    if request.args.get('reset') == 'true':
+        reset_detection_state()
+
     return Response(generate_frames(video_path), mimetype='multipart/x-mixed-replace; boundary=frame')
+
+def reset_detection_state():
+    global current_plate_result
+    current_plate_result.update({
+        "plate": None,
+        "status": None,
+        "color": None,
+        "timestamp": None
+    })
+    plate_detector.last_bbox = None
 
 current_plate_result = {"plate": None, "status": None, "color": None, "timestamp": None}
 
