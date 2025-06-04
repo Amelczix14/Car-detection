@@ -13,7 +13,7 @@ import os
 
 camera_number = 1 # tutaj wpisać odpowiedni numer kamery
 rotate = False # zmienna odpowiedzialna za obracanie filmików
-CURRENT_VIDEO = "amcia2.mp4" # aktualnie wyświetlany filmik
+CURRENT_VIDEO = "amcia3.mp4" # aktualnie wyświetlany filmik
 
 # Baza danych
 DATABASE_URL = 'postgresql://postgres:secret@localhost:5432/access_control'
