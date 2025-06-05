@@ -5,6 +5,7 @@ from detection.plate_detection import PlateDetection
 from detection.ocr_detection import read_licence_plate
 from detection.car_detection import CarDetection
 from detection.color_detection import ColorDetection
+from detection.brand_detection import BrandDetection
 import datetime
 import time
 import cv2
@@ -41,6 +42,7 @@ cap = cv2.VideoCapture(camera_number)
 plate_detector = PlateDetection('../models/my_model/my_model.pt')
 car_detector = CarDetection('../models/car_model/car_model.pt')
 color_detector = ColorDetection()
+brand_detector = BrandDetection('../models/brand_model/best.pt')
 
 def generate_frames(video_path=None):
     cap = None
@@ -62,6 +64,8 @@ def generate_frames(video_path=None):
         plate_img = plate_detector._process_frame(frame)
         plate_number = "NO_PLATE"
         status = "PROCESSING"
+        car_color = None
+        car_brand = None
 
         if plate_img is not None and (time.time() - last_granted_time > 10):
             reads = []
@@ -83,6 +87,9 @@ def generate_frames(video_path=None):
                         x1, y1, x2, y2 = map(int, det.xyxy[0])
                         car_crop = frame[y1:y2, x1:x2]
                         car_color = color_detector.classify_color(car_crop)
+
+                        # === Marka samochodu ===
+                        car_brand, _, _ = brand_detector.detect_brand(frame)
                         break
 
             session.add(Log(plate_number=plate_number, status=status))
@@ -95,9 +102,10 @@ def generate_frames(video_path=None):
             current_plate_result["plate"] = plate_number
             current_plate_result["status"] = status
             current_plate_result["color"] = car_color
+            current_plate_result["brand"] = car_brand
             current_plate_result["timestamp"] = time.time()
 
-        # bounding box dla rejestracji na wizualizacji
+        # bounding box dla rejestracji
         if plate_detector.last_bbox is not None:
             x1, y1, x2, y2 = plate_detector.last_bbox
             cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
@@ -184,11 +192,12 @@ def reset_detection_state():
         "plate": None,
         "status": None,
         "color": None,
+        "brand": None,
         "timestamp": None
     })
     plate_detector.last_bbox = None
 
-current_plate_result = {"plate": None, "status": None, "color": None, "timestamp": None}
+current_plate_result = {"plate": None, "status": None, "color": None, "brand": None, "timestamp": None}
 
 @app.route('/latest_detection')
 def latest_detection():

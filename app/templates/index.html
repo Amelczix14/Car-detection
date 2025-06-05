@@ -169,7 +169,8 @@
     <button class="btn btn-custom-detect" onclick="loadPresentationVideo('amcia.mp4')">Film 1</button>
     <button class="btn btn-custom-detect" onclick="loadPresentationVideo('amcia2.mp4')">Film 2</button>
     <button class="btn btn-custom-detect" onclick="loadPresentationVideo('amcia3.mp4')">Film 3</button>
-    <button class="btn btn-custom-detect" onclick="loadPresentationVideo('madzia.mp4')">Film 4</button>
+    <button class="btn btn-custom-detect" onclick="loadPresentationVideo('amcia4.mp4')">Film 4</button>
+    <button class="btn btn-custom-detect" onclick="loadPresentationVideo('madzia.mp4')">Film 5</button>
   </div>
 
   <!-- Wideo jako MJPEG stream -->
@@ -313,17 +314,24 @@ function showError() {
         const statusEl = document.getElementById("detection-status");
         if (!data || !data.plate) return;
 
-        let colorText = "";
-        if (data.color) {
-          colorText = ` | Kolor: ${data.color}`;
+        let extraInfo = "";
+        if (data.brand || data.color) {
+          extraInfo = " | ";
+          if (data.brand) {
+            extraInfo += `marka: ${data.brand}`;
+          }
+          if (data.color) {
+            if (data.brand) extraInfo += ", ";
+            extraInfo += `kolor: ${data.color}`;
+          }
         }
 
         if (data.status === "GRANTED") {
-          statusEl.innerText = `✅ ${data.plate} — dostęp przyznany${colorText}`;
+          statusEl.innerText = `✅ ${data.plate} — dostęp przyznany${extraInfo}`;
           statusEl.style.color = "green";
           if (lastStatus !== "GRANTED") showToast("Przyznano dostęp");
         } else if (data.status === "DENIED") {
-          statusEl.innerText = `❌ ${data.plate} — brak dostępu${colorText}`;
+          statusEl.innerText = `❌ ${data.plate} — brak dostępu${extraInfo}`;
           statusEl.style.color = "red";
         } else {
           statusEl.innerText = "Przetwarzanie...";
@@ -334,6 +342,7 @@ function showError() {
         lastPlate = data.plate;
       });
   }, 1000);
+
 
 </script>
 
