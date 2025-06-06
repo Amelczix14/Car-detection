@@ -67,11 +67,11 @@ def generate_frames(video_path=None):
         car_color = None
         car_brand = None
 
-        if plate_img is not None and (time.time() - last_granted_time > 10):
+        if plate_img is not None and (time.time() - last_granted_time > 30):
             reads = []
             for _ in range(3):
                 plate_text, conf = read_licence_plate(plate_img)
-                if plate_text:
+                if plate_text or len(plate_text)>4:
                     reads.append(plate_text)
             if reads:
                 plate_number = max(set(reads), key=reads.count)
