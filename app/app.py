@@ -10,6 +10,8 @@ import datetime
 import time
 import cv2
 import os
+from datetime import timedelta
+from zoneinfo import ZoneInfo
 
 
 camera_number = 1 # tutaj wpisać odpowiedni numer kamery
@@ -32,8 +34,10 @@ class Log(Base):
     __tablename__ = 'logs'
     id = Column(Integer, primary_key=True)
     plate_number = Column(String)
-    timestamp = Column(DateTime, default=datetime.datetime.utcnow)
+    timestamp = Column(DateTime, default=lambda: datetime.datetime.now(ZoneInfo("Europe/Warsaw")))
     status = Column(String)  # GRANTED or DENIED
+
+    # color = Column(String, nullable=True)  
 
 # Flask
 app = Flask(__name__)
@@ -72,6 +76,7 @@ def generate_frames(video_path=None):
             for _ in range(3):
                 plate_text, conf = read_licence_plate(plate_img)
                 if plate_text or len(plate_text)>4:
+                    
                     reads.append(plate_text)
             if reads:
                 plate_number = max(set(reads), key=reads.count)
@@ -92,7 +97,12 @@ def generate_frames(video_path=None):
                         car_brand, _, _ = brand_detector.detect_brand(frame)
                         break
 
-            session.add(Log(plate_number=plate_number, status=status))
+            session.add(Log(
+                plate_number=plate_number,
+                status=status,
+                # color=car_color
+            ))
+
             session.commit()
             session.close()
 
@@ -103,7 +113,8 @@ def generate_frames(video_path=None):
             current_plate_result["status"] = status
             current_plate_result["color"] = car_color
             current_plate_result["brand"] = car_brand
-            current_plate_result["timestamp"] = time.time()
+            current_plate_result["timestamp"] = datetime.datetime.now(ZoneInfo("Europe/Warsaw")).isoformat()
+
 
         # bounding box dla rejestracji
         if plate_detector.last_bbox is not None:
@@ -146,7 +157,8 @@ def history():
     return jsonify([
         {
             'plate_number': log.plate_number,
-            'timestamp': log.timestamp.isoformat(),
+            # 'color': log.color,
+            'timestamp': (log.timestamp + timedelta(hours=2)).isoformat(),
             'status': log.status
         }
         for log in logs
@@ -177,7 +189,6 @@ def serve_video(filename):
 def video_with_detection():
     video_file = request.args.get('video', CURRENT_VIDEO)
     video_path = os.path.join('videos', video_file)
-
     if not os.path.exists(video_path):
         return "Video not found", 404
 
