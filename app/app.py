@@ -94,8 +94,12 @@ def generate_frames(video_path=None):
                         car_color = color_detector.classify_color(car_crop)
 
                         # === Marka samochodu ===
-                        car_brand, _, _ = brand_detector.detect_brand(frame)
-                        break
+                        car_brand, brand_crop, brand_coords = brand_detector.detect_brand(frame)
+                        if brand_coords:
+                            bx1, by1, bx2, by2 = brand_coords
+                            cv2.rectangle(frame, (bx1, by1), (bx2, by2), (0, 0, 255), 2)  # Czerwony prostokąt
+                            cv2.putText(frame, "brand", (bx1, by1 - 10),
+                                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
 
             session.add(Log(
                 plate_number=plate_number,
@@ -121,7 +125,7 @@ def generate_frames(video_path=None):
             x1, y1, x2, y2 = plate_detector.last_bbox
             cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
             if plate_number != "NO_PLATE":
-                cv2.putText(frame, plate_number, (x1, y1 - 10),
+                cv2.putText(frame, "plate", (x1, y1 - 10),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
 
         _, buffer = cv2.imencode('.jpg', frame)
