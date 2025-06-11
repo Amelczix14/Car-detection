@@ -115,9 +115,17 @@
 
   <div class="tab-content">
     <!-- Podgląd -->
+<!--    <div class="tab-pane fade show active" id="live">-->
+<!--      <h5 class="section-title">Podgląd na żywo z kamery</h5>-->
+<!--      <img src="/video" class="img-fluid rounded shadow border"-->
+<!--      onerror="showError()"/>-->
+<!--    </div>-->
     <div class="tab-pane fade show active" id="live">
       <h5 class="section-title">Podgląd na żywo z kamery</h5>
       <img src="/video" class="img-fluid rounded shadow border">
+      <div id="live-detection-status" class="text-center fw-bold mt-3" style="font-size: 1.2rem; color: gray;">
+        Przetwarzanie...
+      </div>
     </div>
 
     <!-- Historia -->
@@ -205,7 +213,7 @@
           <td>${item.plate_number}</td>
           <td><span class="badge ${item.status === 'GRANTED' ? 'bg-success' : 'bg-danger'}">${item.status}</span></td>
           <td>${new Date(item.timestamp).toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' })}</td>
-         
+
 
 
         </tr>`;
@@ -305,6 +313,8 @@ function showError() {
   document.getElementById("detection-status").innerText = "Błąd podczas ładowania filmu.";
 }
 </script>
+
+<!--</script>-->
 <script>
   let lastPlate = null;
   let lastStatus = null;
@@ -314,6 +324,7 @@ function showError() {
       .then(response => response.json())
       .then(data => {
         const statusEl = document.getElementById("detection-status");
+        const liveStatusEl = document.getElementById("live-detection-status");
         if (!data || !data.plate) return;
 
         let extraInfo = "";
@@ -328,25 +339,37 @@ function showError() {
           }
         }
 
+        let statusText = "";
+        let statusColor = "";
+
         if (data.status === "GRANTED") {
-          statusEl.innerText = `✅ ${data.plate} — dostęp przyznany${extraInfo}`;
-          statusEl.style.color = "green";
+          statusText = `✅ ${data.plate} — dostęp przyznany${extraInfo}`;
+          statusColor = "green";
           if (lastStatus !== "GRANTED") showToast("Przyznano dostęp");
         } else if (data.status === "DENIED") {
-          statusEl.innerText = `❌ ${data.plate} — brak dostępu${extraInfo}`;
-          statusEl.style.color = "red";
+          statusText = `❌ ${data.plate} — brak dostępu${extraInfo}`;
+          statusColor = "red";
         } else {
-          statusEl.innerText = "Przetwarzanie...";
-          statusEl.style.color = "gray";
+          statusText = "Przetwarzanie...";
+          statusColor = "gray";
+        }
+
+        // Aktualizacja obu zakładek
+        if (statusEl) {
+          statusEl.innerText = statusText;
+          statusEl.style.color = statusColor;
+        }
+        if (liveStatusEl) {
+          liveStatusEl.innerText = statusText;
+          liveStatusEl.style.color = statusColor;
         }
 
         lastStatus = data.status;
         lastPlate = data.plate;
       });
   }, 1000);
-
-
 </script>
+
 
 </body>
 </html>
