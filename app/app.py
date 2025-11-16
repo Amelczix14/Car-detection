@@ -48,13 +48,85 @@ car_detector = CarDetection('../models/car_model/car_model.pt')
 color_detector = ColorDetection()
 brand_detector = BrandDetection('../models/brand_model/best.pt')
 
-def generate_frames(video_path=None):
-    cap = None
-    if video_path:
-        cap = cv2.VideoCapture(video_path)
-    else:
-        cap = cv2.VideoCapture(camera_number)
+def process_image(image_path):
+    frame = cv2.imread(image_path)
+    if frame is None:
+        return None, None
 
+    # detekcja tablicy
+    plate_img = plate_detector._process_frame(frame)
+    plate_number = None
+    if plate_img is not None:
+        reads = []
+        for _ in range(3):
+            plate_text, conf = read_licence_plate(plate_img)
+            if plate_text and len(plate_text) > 4:
+                reads.append(plate_text)
+        if reads:
+            plate_number = max(set(reads), key=reads.count)
+
+    # --- POPRAWKA: sprawdzamy bazę ---
+    session = Session()
+    found = None
+    if plate_number:
+        found = session.query(Plate).filter_by(plate_number=plate_number).first()
+    session.close()
+
+    status = "GRANTED" if found else "DENIED"
+
+    # detekcja samochodu i koloru
+    car_color = None
+    car_brand = None
+    car_results = car_detector.model(frame, verbose=False)
+
+    for det in car_results[0].boxes:
+        if det.conf > car_detector.min_thresh:
+            x1, y1, x2, y2 = map(int, det.xyxy[0])
+            car_crop = frame[y1:y2, x1:x2]
+            car_color = color_detector.classify_color(car_crop)
+
+            # marka
+            car_brand, brand_crop, brand_coords = brand_detector.detect_brand(frame)
+            if brand_coords:
+                bx1, by1, bx2, by2 = brand_coords
+                cv2.rectangle(frame, (bx1, by1), (bx2, by2), (0, 0, 255), 2)
+                cv2.putText(frame, "brand", (bx1, by1 - 10),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
+
+    # bounding box tablicy
+    if plate_detector.last_bbox is not None:
+        x1, y1, x2, y2 = plate_detector.last_bbox
+        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+
+    return frame, {
+        "plate": plate_number,
+        "status": status,
+        "color": car_color,
+        "brand": car_brand,
+        "timestamp": datetime.datetime.now(ZoneInfo("Europe/Warsaw")).isoformat()
+    }
+
+def generate_frames(video_path=None):
+    # --- obsługa zdjęć ---
+    if video_path:
+        ext = os.path.splitext(video_path)[1].lower()
+        if ext in ['.jpg', '.jpeg', '.png']:
+            frame, result = process_image(video_path)
+            if frame is None:
+                return
+
+            current_plate_result.update(result)
+
+            _, buffer = cv2.imencode('.jpg', frame)
+            yield (
+                b'--frame\r\n'
+                b'Content-Type: image/jpeg\r\n\r\n' +
+                buffer.tobytes() + b'\r\n'
+            )
+            return
+
+    # --- OBSŁUGA WIDEO (oryginalna logika, nie zmieniona) ---
+    cap = cv2.VideoCapture(video_path if video_path else camera_number)
     last_granted_time = 0
 
     while cap.isOpened():
@@ -75,15 +147,15 @@ def generate_frames(video_path=None):
             reads = []
             for _ in range(3):
                 plate_text, conf = read_licence_plate(plate_img)
-                if plate_text or len(plate_text)>4:
-                    
+                if plate_text or len(plate_text) > 4:
                     reads.append(plate_text)
+
             if reads:
                 plate_number = max(set(reads), key=reads.count)
 
             session = Session()
             found = session.query(Plate).filter_by(plate_number=plate_number).first()
-            status = 'GRANTED' if found else 'DENIED'
+            status = "GRANTED" if found else "DENIED"
 
             if plate_number:
                 car_results = car_detector.model(frame, verbose=False)
@@ -93,18 +165,16 @@ def generate_frames(video_path=None):
                         car_crop = frame[y1:y2, x1:x2]
                         car_color = color_detector.classify_color(car_crop)
 
-                        # === Marka samochodu ===
                         car_brand, brand_crop, brand_coords = brand_detector.detect_brand(frame)
                         if brand_coords:
                             bx1, by1, bx2, by2 = brand_coords
-                            cv2.rectangle(frame, (bx1, by1), (bx2, by2), (0, 0, 255), 2)  # Czerwony prostokąt
+                            cv2.rectangle(frame, (bx1, by1), (bx2, by2), (0, 0, 255), 2)
                             cv2.putText(frame, "brand", (bx1, by1 - 10),
                                         cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
 
             session.add(Log(
                 plate_number=plate_number,
-                status=status,
-                # color=car_color
+                status=status
             ))
 
             session.commit()
@@ -113,14 +183,15 @@ def generate_frames(video_path=None):
             if status == "GRANTED":
                 last_granted_time = time.time()
 
-            current_plate_result["plate"] = plate_number
-            current_plate_result["status"] = status
-            current_plate_result["color"] = car_color
-            current_plate_result["brand"] = car_brand
-            current_plate_result["timestamp"] = datetime.datetime.now(ZoneInfo("Europe/Warsaw")).isoformat()
+            current_plate_result.update({
+                "plate": plate_number,
+                "status": status,
+                "color": car_color,
+                "brand": car_brand,
+                "timestamp": datetime.datetime.now(ZoneInfo("Europe/Warsaw")).isoformat()
+            })
 
-
-        # bounding box dla rejestracji
+        # bounding box tablicy
         if plate_detector.last_bbox is not None:
             x1, y1, x2, y2 = plate_detector.last_bbox
             cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
@@ -129,9 +200,11 @@ def generate_frames(video_path=None):
                             cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
 
         _, buffer = cv2.imencode('.jpg', frame)
-        frame_bytes = buffer.tobytes()
-        yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+        yield (
+            b'--frame\r\n'
+            b'Content-Type: image/jpeg\r\n\r\n' +
+            buffer.tobytes() + b'\r\n'
+        )
 
     cap.release()
 

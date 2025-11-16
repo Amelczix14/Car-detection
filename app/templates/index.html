@@ -172,6 +172,12 @@
     <button class="btn btn-custom-detect" onclick="loadPresentationVideo('madzia2.mp4')">Film 4</button>
     <button class="btn btn-custom-detect" onclick="loadPresentationVideo('amcia.mp4')">Film 5</button>
   </div>
+  <div class="mb-3 d-flex justify-content-center gap-2">
+    <button class="btn btn-custom-detect" onclick="loadPresentationPhoto('car25.jpg')">Zdjęcie 1</button>
+    <button class="btn btn-custom-detect" onclick="loadPresentationPhoto('car52.jpg')">Zdjęcie 2</button>
+    <button class="btn btn-custom-detect" onclick="loadPresentationPhoto('car38.jpg')">Zdjęcie 3</button>
+    <button class="btn btn-custom-detect" onclick="loadPresentationPhoto('car109.jpg')">Zdjęcie 4</button>
+  </div>
 
   <!-- Wideo jako MJPEG stream -->
   <div class="text-center mb-3">
@@ -303,6 +309,19 @@ function hideLoading() {
 
 function showError() {
   document.getElementById("detection-status").innerText = "Błąd podczas ładowania filmu.";
+}
+</script>
+<script>
+function loadPresentationPhoto(filename) {
+  const videoElement = document.getElementById("presentation-video");
+  const status = document.getElementById("detection-status");
+
+  videoElement.src = `/video_with_detection?video=../photos/${filename}&reset=true&t=${Date.now()}`;
+  status.innerText = "Przetwarzanie...";
+  status.style.color = "gray";
+
+  lastPlate = null;
+  lastStatus = null;
 }
 </script>
 <script>
