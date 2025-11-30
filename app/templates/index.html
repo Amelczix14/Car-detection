@@ -339,54 +339,37 @@ function loadPresentationPhoto(filename) {
   let lastStatus = null;
 
   setInterval(() => {
-    fetch('/latest_detection')
-      .then(response => response.json())
-      .then(data => {
-        const statusEl = document.getElementById("detection-status");
-        const liveStatusEl = document.getElementById("live-detection-status");
-        if (!data || !data.plate) return;
+  fetch('/latest_detection')
+    .then(res => res.json())
+    .then(data => {
+      const statusEl = document.getElementById("detection-status");
+      const liveStatusEl = document.getElementById("live-detection-status");
 
-        let extraInfo = "";
-        if (data.brand || data.color) {
-          extraInfo = " | ";
-          if (data.brand) {
-            extraInfo += `marka: ${data.brand}`;
-          }
-          if (data.color) {
-            if (data.brand) extraInfo += ", ";
-            extraInfo += `kolor: ${data.color}`;
-          }
-        }
+      if (!data || !data.plate) return; // tylko jeśli brak całkowicie
 
-        let statusText = "";
-        let statusColor = "";
+      let extraInfo = "";
+      if (data.brand || data.color) {
+        extraInfo = " | ";
+        if (data.brand) extraInfo += `marka: ${data.brand}`;
+        if (data.color) extraInfo += (data.brand ? ", " : "") + `kolor: ${data.color}`;
+      }
 
-        if (data.status === "GRANTED") {
-          statusText = `✅ ${data.plate} — dostęp przyznany${extraInfo}`;
-          statusColor = "green";
-          if (lastStatus !== "GRANTED") showToast("Przyznano dostęp");
-        } else if (data.status === "DENIED") {
-          statusText = `❌ ${data.plate} — brak dostępu${extraInfo}`;
-          statusColor = "red";
-        } else {
-          statusText = "Przetwarzanie...";
-          statusColor = "gray";
-        }
+      let statusText = "Przetwarzanie...";
+      let statusColor = "gray";
 
-        // Aktualizacja obu zakładek
-        if (statusEl) {
-          statusEl.innerText = statusText;
-          statusEl.style.color = statusColor;
-        }
-        if (liveStatusEl) {
-          liveStatusEl.innerText = statusText;
-          liveStatusEl.style.color = statusColor;
-        }
+      if (data.status === "GRANTED") {
+        statusText = `✅ ${data.plate} — dostęp przyznany${extraInfo}`;
+        statusColor = "green";
+      } else if (data.status === "DENIED") {
+        statusText = `❌ ${data.plate} — brak dostępu${extraInfo}`;
+        statusColor = "red";
+      }
 
-        lastStatus = data.status;
-        lastPlate = data.plate;
-      });
-  }, 1000);
+      if (statusEl) { statusEl.innerText = statusText; statusEl.style.color = statusColor; }
+      if (liveStatusEl) { liveStatusEl.innerText = statusText; liveStatusEl.style.color = statusColor; }
+    });
+}, 1000);
+
 </script>
 
 

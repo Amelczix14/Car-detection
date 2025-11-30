@@ -106,16 +106,134 @@ def process_image(image_path):
         "timestamp": datetime.datetime.now(ZoneInfo("Europe/Warsaw")).isoformat()
     }
 
-def generate_frames(video_path=None):
-    # --- obsługa zdjęć ---
-    if video_path:
-        ext = os.path.splitext(video_path)[1].lower()
-        if ext in ['.jpg', '.jpeg', '.png']:
-            frame, result = process_image(video_path)
-            if frame is None:
-                return
+# Globalny bufor i stan pauzy
+plate_detection_buffer = []  # lista odczytów (True/False) w aktualnym oknie 10s
+DETECTION_WINDOW = 5  # czas odczytu w sekundach
+pause_until = 0  # timestamp do kiedy pauza po GRANTED
+current_plate_window_start = None  # timestamp rozpoczęcia aktualnego okna
+last_denied_plate = None  # numer tablicy odrzuconej, aby wyświetlać DENIED do kolejnego odczytu
 
-            current_plate_result.update(result)
+def generate_frames(video_path=None):
+    global plate_detection_buffer, pause_until, current_plate_window_start, last_denied_plate
+
+    cap = cv2.VideoCapture(video_path if video_path else camera_number)
+    fps = cap.get(cv2.CAP_PROP_FPS) or 25  # domyślnie 25 fps jeśli brak info
+    try:
+        while cap.isOpened():
+            ret, frame = cap.read()
+            if not ret:
+                break
+
+            now_ts = time.time()
+
+            # Pauza po GRANTED – tylko wyświetlamy status
+            if now_ts < pause_until:
+                if plate_detector.last_bbox is not None:
+                    x1, y1, x2, y2 = plate_detector.last_bbox
+                    cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                    if current_plate_result["plate"]:
+                        cv2.putText(frame, current_plate_result["plate"], (x1, y1 - 10),
+                                    cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 0), 3)
+                _, buffer = cv2.imencode('.jpg', frame)
+                yield (
+                    b'--frame\r\n'
+                    b'Content-Type: image/jpeg\r\n\r\n' +
+                    buffer.tobytes() + b'\r\n'
+                )
+                time.sleep(1 / fps)
+                continue
+
+            if rotate:
+                frame = cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
+
+            plate_img = plate_detector._process_frame(frame)
+            plate_number = "NO_PLATE"
+            car_color = None
+            car_brand = None
+
+            # Jeśli wykryto tablicę – OCR + detekcja samochodu
+            if plate_img is not None:
+                plate_text, conf = read_licence_plate(plate_img)
+                if plate_text:
+                    plate_number = plate_text
+
+                # Detekcja samochodu i koloru/marki tylko po wykryciu tablicy
+                car_results = car_detector.model(frame, verbose=False)
+                for det in car_results[0].boxes:
+                    if det.conf > car_detector.min_thresh:
+                        x1, y1, x2, y2 = map(int, det.xyxy[0])
+                        car_crop = frame[y1:y2, x1:x2]
+                        car_color = color_detector.classify_color(car_crop)
+                        car_brand, brand_crop, brand_coords = brand_detector.detect_brand(frame)
+                        if brand_coords and car_brand:
+                            bx1, by1, bx2, by2 = brand_coords
+                            cv2.rectangle(frame, (bx1, by1), (bx2, by2), (0, 0, 255), 2)
+                            cv2.putText(frame, car_brand, (bx1, by1 - 10),
+                                        cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 2)
+
+            # Aktualizacja current_plate_result – zawsze
+            if plate_number == "NO_PLATE" or len(plate_number) <= 4:
+                current_plate_result.update({
+                    "plate": last_denied_plate,
+                    "status": "DENIED" if last_denied_plate else None,
+                    "color": car_color,
+                    "brand": car_brand,
+                    "timestamp": datetime.datetime.now(ZoneInfo("Europe/Warsaw")).isoformat()
+                })
+                plate_detection_buffer = []
+                current_plate_window_start = None
+            else:
+                # rozpoczęcie nowego okna detekcji
+                if current_plate_window_start is None:
+                    current_plate_window_start = now_ts
+                    plate_detection_buffer = []
+
+                # sprawdzamy w bazie
+                session = Session()
+                found = session.query(Plate).filter_by(plate_number=plate_number).first()
+                session.close()
+                plate_detection_buffer.append(True if found else False)
+
+                elapsed = now_ts - current_plate_window_start
+                if elapsed >= DETECTION_WINDOW:
+                    majority_valid = sum(plate_detection_buffer) > len(plate_detection_buffer) / 2
+                    final_status = "GRANTED" if majority_valid else "DENIED"
+
+                    # zapis do logów
+                    session = Session()
+                    session.add(Log(
+                        plate_number=plate_number,
+                        status=final_status,
+                        timestamp=datetime.datetime.now(ZoneInfo("Europe/Warsaw"))
+                    ))
+                    session.commit()
+                    session.close()
+
+                    current_plate_result.update({
+                        "plate": plate_number,
+                        "status": final_status,
+                        "color": car_color,
+                        "brand": car_brand,
+                        "timestamp": datetime.datetime.now(ZoneInfo("Europe/Warsaw")).isoformat()
+                    })
+
+                    if final_status == "GRANTED":
+                        pause_until = now_ts + DETECTION_WINDOW
+                        plate_detection_buffer = []
+                        current_plate_window_start = None
+                        last_denied_plate = None
+                    else:
+                        last_denied_plate = plate_number
+                        plate_detection_buffer = []
+                        current_plate_window_start = None
+
+            # Bounding box tablicy i napis
+            if plate_detector.last_bbox is not None:
+                x1, y1, x2, y2 = plate_detector.last_bbox
+                cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                if plate_number != "NO_PLATE":
+                    cv2.putText(frame, plate_number, (x1, y1 - 10),
+                                cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 0), 3)
 
             _, buffer = cv2.imencode('.jpg', frame)
             yield (
@@ -123,90 +241,11 @@ def generate_frames(video_path=None):
                 b'Content-Type: image/jpeg\r\n\r\n' +
                 buffer.tobytes() + b'\r\n'
             )
-            return
+            time.sleep(1 / fps)
+    finally:
+        cap.release()
 
-    # --- OBSŁUGA WIDEO (oryginalna logika, nie zmieniona) ---
-    cap = cv2.VideoCapture(video_path if video_path else camera_number)
-    last_granted_time = 0
 
-    while cap.isOpened():
-        ret, frame = cap.read()
-        if not ret:
-            break
-
-        if rotate:
-            frame = cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
-
-        plate_img = plate_detector._process_frame(frame)
-        plate_number = "NO_PLATE"
-        status = "PROCESSING"
-        car_color = None
-        car_brand = None
-
-        if plate_img is not None and (time.time() - last_granted_time > 30):
-            reads = []
-            for _ in range(3):
-                plate_text, conf = read_licence_plate(plate_img)
-                if plate_text or len(plate_text) > 4:
-                    reads.append(plate_text)
-
-            if reads:
-                plate_number = max(set(reads), key=reads.count)
-
-            session = Session()
-            found = session.query(Plate).filter_by(plate_number=plate_number).first()
-            status = "GRANTED" if found else "DENIED"
-
-            if plate_number:
-                car_results = car_detector.model(frame, verbose=False)
-                for det in car_results[0].boxes:
-                    if det.conf > car_detector.min_thresh:
-                        x1, y1, x2, y2 = map(int, det.xyxy[0])
-                        car_crop = frame[y1:y2, x1:x2]
-                        car_color = color_detector.classify_color(car_crop)
-
-                        car_brand, brand_crop, brand_coords = brand_detector.detect_brand(frame)
-                        if brand_coords:
-                            bx1, by1, bx2, by2 = brand_coords
-                            cv2.rectangle(frame, (bx1, by1), (bx2, by2), (0, 0, 255), 2)
-                            cv2.putText(frame, "brand", (bx1, by1 - 10),
-                                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
-
-            session.add(Log(
-                plate_number=plate_number,
-                status=status
-            ))
-
-            session.commit()
-            session.close()
-
-            if status == "GRANTED":
-                last_granted_time = time.time()
-
-            current_plate_result.update({
-                "plate": plate_number,
-                "status": status,
-                "color": car_color,
-                "brand": car_brand,
-                "timestamp": datetime.datetime.now(ZoneInfo("Europe/Warsaw")).isoformat()
-            })
-
-        # bounding box tablicy
-        if plate_detector.last_bbox is not None:
-            x1, y1, x2, y2 = plate_detector.last_bbox
-            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-            if plate_number != "NO_PLATE":
-                cv2.putText(frame, "plate", (x1, y1 - 10),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
-
-        _, buffer = cv2.imencode('.jpg', frame)
-        yield (
-            b'--frame\r\n'
-            b'Content-Type: image/jpeg\r\n\r\n' +
-            buffer.tobytes() + b'\r\n'
-        )
-
-    cap.release()
 
 @app.route('/')
 def index():
@@ -276,6 +315,11 @@ def video_with_detection():
 
 def reset_detection_state():
     global current_plate_result
+    global plate_detection_buffer
+    global pause_until
+    global current_plate_window_start
+    global last_denied_plate
+
     current_plate_result.update({
         "plate": None,
         "status": None,
@@ -284,6 +328,10 @@ def reset_detection_state():
         "timestamp": None
     })
     plate_detector.last_bbox = None
+    plate_detection_buffer = []
+    pause_until = 0
+    current_plate_window_start = None
+    last_denied_plate = None
 
 current_plate_result = {"plate": None, "status": None, "color": None, "brand": None, "timestamp": None}
 
@@ -296,7 +344,17 @@ def get_current_video():
     return jsonify({'filename': CURRENT_VIDEO})
 
 
+from sqlalchemy import text  # dodaj na początku z importami
+
 if __name__ == '__main__':
     if not os.path.exists("static/logs"):
         os.makedirs("static/logs")
+
+    # Czyszczenie historii logów przy każdym uruchomieniu
+    session = Session()
+    session.execute(text("TRUNCATE TABLE logs RESTART IDENTITY;"))
+    session.commit()
+    session.close()
+
     app.run(debug=True)
+

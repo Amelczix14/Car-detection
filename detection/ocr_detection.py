@@ -40,7 +40,6 @@ import numpy as np
 
 
 def read_licence_plate(cropped_plate):
-    import re
     scale_factor = 2
     enlarged_plate = cv2.resize(cropped_plate, None, fx=scale_factor, fy=scale_factor, interpolation=cv2.INTER_LINEAR)
 
@@ -53,13 +52,16 @@ def read_licence_plate(cropped_plate):
     kernel = np.ones((3, 3), np.uint8)
     dilated = cv2.dilate(denoised, kernel, iterations=1)
 
-    custom_config = r'--oem 3 --psm 6 -c tessedit_char_whitelist=' + allowed_characters + ' -c output_type=string'
-    detected_text = pytesseract.image_to_string(dilated, config=custom_config)
-    detected_text = detected_text.strip().replace(' ', '').replace('\n', '') # dodane
-    data = pytesseract.image_to_data(dilated, config=custom_config, output_type=pytesseract.Output.DICT)
+    # Tylko minimalna poprawka dla I: PSM 6 i OCR Engine 3 są dobre
+    # bez zmiany obrazu, whitelist bez blacklist
+    custom_config = r'--oem 3 --psm 6 -c tessedit_char_whitelist=' + allowed_characters
 
-    # text = ''.join([re.sub(r'\W+', '', w) for w in data['text'] if w.strip() != ''])
-    confs = [int(c) for c in data['conf']]
-    confidence = np.mean(confs) if confs else 0
+    detected_text = pytesseract.image_to_string(dilated, config=custom_config)
+    detected_text = detected_text.strip().replace(' ', '').replace('\n', '')
+
+    data = pytesseract.image_to_data(dilated, config=custom_config, output_type=pytesseract.Output.DICT)
+    confs = [float(c) for c in data['conf'] if c != '-1']
+    confidence = float(np.mean(confs)) if confs else 0.0
 
     return detected_text, confidence
+
